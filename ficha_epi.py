@@ -6,204 +6,221 @@ from streamlit_drawable_canvas import st_canvas
 import os
 from PIL import Image
 
-st.set_page_config(page_title="Ficha de EPI Digital", layout="wide")
+st.set_page_config(page_title="Gestão Profissional de EPI", layout="wide", page_icon="🛡️")
 
 DIRETORIO_ATUAL = os.path.dirname(os.path.abspath(__file__)) if "__file__" in locals() else "."
 ARQUIVO_MEMORIA = os.path.join(DIRETORIO_ATUAL, "historico_epis.csv")
 
+# Inicializa o banco de dados local
 if not os.path.exists(ARQUIVO_MEMORIA):
     df_vazio = pd.DataFrame(columns=[
         "Nome", "Empresa", "Setor", "Funcao", "CTPS", "DataAdm",
-        "Calcado", "Calca", "TamCalca", "Camisa", "TamCamisa", "Data", "EPI", "CA"
+        "Calcado", "Calca", "TamCalca", "Camisa", "TamCamisa", "DataEntrega", "EPI", "CA"
     ])
     df_vazio.to_csv(ARQUIVO_MEMORIA, index=False)
 
-def carregar_historico(nome):
+def carregar_dados():
     if os.path.exists(ARQUIVO_MEMORIA):
-        df = pd.read_csv(ARQUIVO_MEMORIA)
-        if not df.empty and "Nome" in df.columns:
-            return df[df["Nome"].str.lower() == nome.strip().lower()]
-    return pd.DataFrame(columns=["Nome", "Empresa", "Setor", "Funcao", "CTPS", "DataAdm", "Calcado", "Calca", "TamCalca", "Camisa", "TamCamisa", "Data", "EPI", "CA"])
+        return pd.read_csv(ARQUIVO_MEMORIA)
+    return pd.DataFrame()
 
-def gerar_pdf(dados, historico_df, imagem_assinatura=None):
+def gerar_pdf_comprovante(dados_colab, historico_funcionario, imagem_assinatura=None):
     pdf = FPDF(format="A4")
-    pdf.set_auto_page_break(auto=False)
-    
-    # --- PÁGINA 1 (FRENTE DA FICHA) ---
+    pdf.set_auto_page_break(auto=True, margin=15)
     pdf.add_page()
-    img_frente = os.path.join(DIRETORIO_ATUAL, "31442.png")
-    if os.path.exists(img_frente):
-        pdf.image(img_frente, x=0, y=0, w=210, h=297)
     
+    # Cabeçalho do Comprovante Profissional
+    pdf.set_font("Arial", "B", 16)
+    pdf.cell(190, 10, "FICHA DE CONTROLE E ENTREGA DE EPI", ln=True, align="C")
+    pdf.set_font("Arial", "", 10)
+    pdf.cell(190, 6, "Em conformidade com a Norma Regulamentadora NR-06", ln=True, align="C")
+    pdf.ln(5)
+    
+    # Dados do Funcionário
+    pdf.set_font("Arial", "B", 11)
+    pdf.cell(190, 8, "1. Dados do Colaborador", ln=True)
     pdf.set_font("Arial", "", 10)
     
-    # Cabeçalho - Dados fixos do colaborador
-    pdf.text(20, 21.5, str(dados.get('Empresa', '')))
-    pdf.text(142, 21.5, str(dados.get('Calcado', '')))
+    pdf.cell(95, 6, f"Nome: {dados_colab.get('Nome', '')}", border=1)
+    pdf.cell(95, 6, f"Empresa: {dados_colab.get('Empresa', '')}", border=1, ln=True)
     
-    pdf.text(16, 29.5, str(dados.get('Setor', '')))
-    pdf.text(142, 29.5, str(dados.get('Calca', '')))
-    pdf.text(182, 29.5, str(dados.get('TamCalca', '')))
+    pdf.cell(95, 6, f"Setor: {dados_colab.get('Setor', '')}", border=1)
+    pdf.cell(95, 6, f"Função: {dados_colab.get('Funcao', '')}", border=1, ln=True)
     
-    pdf.text(22, 37.5, str(dados.get('Funcao', '')))
-    pdf.text(142, 37.5, str(dados.get('Camisa', '')))
-    pdf.text(182, 37.5, str(dados.get('TamCamisa', '')))
+    pdf.cell(95, 6, f"CTPS: {dados_colab.get('CTPS', '')}", border=1)
+    pdf.cell(95, 6, f"Admissão: {dados_colab.get('DataAdm', '')}", border=1, ln=True)
     
-    pdf.text(35, 45.5, str(dados.get('Nome', '')))
-    pdf.text(160, 45.5, str(dados.get('DataAdm', ''))) # Data de Admissão no cabeçalho
+    pdf.cell(63, 6, f"Calçado: {dados_colab.get('Calcado', '')}", border=1)
+    pdf.cell(63, 6, f"Calça: {dados_colab.get('Calca', '')} ({dados_colab.get('TamCalca', '')})", border=1)
+    pdf.cell(64, 6, f"Camisa: {dados_colab.get('Camisa', '')} ({dados_colab.get('TamCamisa', '')})", border=1, ln=True)
+    pdf.ln(8)
     
-    pdf.text(45, 53.5, str(dados.get('CTPS', '')))
+    # Histórico de EPIs Entregues
+    pdf.set_font("Arial", "B", 11)
+    pdf.cell(190, 8, "2. Histórico de Equipamentos Entregues", ln=True)
     
-    # Assinatura digitalizada na frente
+    # Cabeçalho da Tabela
+    pdf.set_font("Arial", "B", 9)
+    pdf.cell(25, 7, "Data", border=1, align="C")
+    pdf.cell(125, 7, "Equipamento de Proteção Individual (EPI)", border=1, align="C")
+    pdf.cell(40, 7, "C.A. (Certificado)", border=1, align="C", ln=True)
+    
+    pdf.set_font("Arial", "", 9)
+    for _, row in historico_funcionario.iterrows():
+        pdf.cell(25, 6, str(row['DataEntrega']), border=1, align="C")
+        pdf.cell(125, 6, str(row['EPI']), border=1)
+        pdf.cell(40, 6, str(row['CA']), border=1, align="C", ln=True)
+        
+    pdf.ln(10)
+    
+    # Termo de Responsabilidade
+    pdf.set_font("Arial", "B", 9)
+    pdf.cell(190, 5, "TERMO DE RESPONSABILIDADE:", ln=True)
+    pdf.set_font("Arial", "", 8)
+    pdf.multi_cell(190, 4, "Declaro que recebi os EPIs acima relacionados em perfeito estado de conservação, compromete-me a usá-los estritamente para os fins a que se destinam, responsabilizando-me pela sua guarda, higienização e conservação, bem como comunicar à empresa qualquer irregularidade ou dano.")
+    pdf.ln(15)
+    
+    # Assinatura
     if imagem_assinatura is not None:
         caminho_ass = "temp_assinatura.png"
         imagem_assinatura.save(caminho_ass)
-        pdf.image(caminho_ass, x=75, y=110, w=60, h=18)
+        pdf.image(caminho_ass, x=65, y=pdf.get_y(), w=80, h=25)
         if os.path.exists(caminho_ass):
             os.remove(caminho_ass)
-
-    # Tabela da Frente (Até 14 registros - cada um com sua respectiva data de entrega real)
-    y_inicial = 145
-    passo_y = 7.3
+            
+    pdf.ln(25)
+    pdf.cell(190, 0, "", "T", ln=True)
+    pdf.cell(190, 5, f"Assinatura do Colaborador: {dados_colab.get('Nome', '')}", ln=True, align="C")
     
-    for index, row in historico_df.iterrows():
-        if index < 14:
-            y_atual = y_inicial + (index * passo_y)
-            pdf.text(12, y_atual, str(row['Data']))  # Data exata da entrega/assinatura daquele EPI
-            pdf.text(30, y_atual, str(row['EPI']))
-            pdf.text(98, y_atual, str(row['CA']))
-            pdf.text(138, y_atual, "Entregue")
-            
-    # --- PÁGINA 2 (VERSO DA FICHA) ---
-    if len(historico_df) > 14:
-        pdf.add_page()
-        img_verso = os.path.join(DIRETORIO_ATUAL, "31443.png")
-        if os.path.exists(img_verso):
-            pdf.image(img_verso, x=0, y=0, w=210, h=297)
-            
-        y_inicial_verso = 25
-        for index, row in historico_df.iterrows():
-            if index >= 14:
-                linha_verso = index - 14
-                y_atual = y_inicial_verso + (linha_verso * passo_y)
-                pdf.text(12, y_atual, str(row['Data']))  # Data exata da entrega no verso/nova folha
-                pdf.text(30, y_atual, str(row['EPI']))
-                pdf.text(98, y_atual, str(row['CA']))
-                pdf.text(138, y_atual, "Entregue")
+    nome_arquivo = f"Comprovante_{dados_colab['Nome'].replace(' ', '_')}.pdf"
+    pdf.output(nome_arquivo)
+    return nome_arquivo
+
+# ================= INTERFACE PRINCIPAL =================
+
+st.title("🛡️ Sistema Profissional de Controle de EPIs")
+
+aba1, aba2, aba3 = st.tabs(["➕ Registrar Entrega", "👥 Consultar Colaborador", "📊 Base Completa"])
+
+df_geral = carregar_dados()
+
+with aba1:
+    st.subheader("Nova Entrega de EPI")
+    
+    col_n1, col_n2 = st.columns([3, 1])
+    with col_n1:
+        input_nome = st.text_input("Nome Completo do Funcionário:")
+    with col_n2:
+        st.write("")
+        btn_autofill = st.button("🔍 Carregar Dados", use_container_width=True)
         
-    nome_arquivo_pdf = f"Ficha_{dados['Nome'].replace(' ', '_')}.pdf"
-    pdf.output(nome_arquivo_pdf)
-    return nome_arquivo_pdf
-
-# ================= INTERFACE DO SITE =================
-
-st.title("🛡️ Sistema de Ficha de EPI")
-
-if "empresa" not in st.session_state:
-    st.session_state.empresa = ""
-    st.session_state.setor = ""
-    st.session_state.funcao = ""
-    st.session_state.ctps = ""
-    st.session_state.data_adm = ""
-    st.session_state.calcado = ""
-    st.session_state.calca = ""
-    st.session_state.tam_calca = ""
-    st.session_state.camisa = ""
-    st.session_state.tam_camisa = ""
-
-col_b1, col_b2 = st.columns([3, 1])
-with col_b1:
-    input_nome = st.text_input("Digite o Nome do Funcionário:")
-with col_b2:
-    st.write("")
-    btn_buscar = st.button("🔍 Buscar", use_container_width=True)
-
-if btn_buscar and input_nome:
-    hist = carregar_historico(input_nome)
-    if not hist.empty:
-        st.success(f"✅ Histórico encontrado! ({len(hist)} EPIs registrados).")
-        ultima = hist.iloc[-1]
-        st.session_state.empresa = str(ultima.get('Empresa', ''))
-        st.session_state.setor = str(ultima.get('Setor', ''))
-        st.session_state.funcao = str(ultima.get('Funcao', ''))
-        st.session_state.ctps = str(ultima.get('CTPS', ''))
-        st.session_state.data_adm = str(ultima.get('DataAdm', ''))
-        st.session_state.calcado = str(ultima.get('Calcado', ''))
-        st.session_state.calca = str(ultima.get('Calca', ''))
-        st.session_state.tam_calca = str(ultima.get('TamCalca', ''))
-        st.session_state.camisa = str(ultima.get('Camisa', ''))
-        st.session_state.tam_camisa = str(ultima.get('TamCamisa', ''))
-    else:
-        st.warning("⚠️ Nenhum histórico anterior encontrado para este nome. Preencha os dados abaixo.")
-
-with st.expander("📝 Preencher / Atualizar Dados do Funcionário", expanded=True):
-    col1, col2 = st.columns(2)
-    with col1:
-        empresa = st.text_input("Empresa", value=st.session_state.empresa)
-        setor = st.text_input("Setor", value=st.session_state.setor)
-        funcao = st.text_input("Função", value=st.session_state.funcao)
-        ctps = st.text_input("Carteira de Trabalho", value=st.session_state.ctps)
-        data_adm = st.text_input("Data de Admissão", value=st.session_state.data_adm)
-    with col2:
-        calcado = st.text_input("Calçado Nº", value=st.session_state.calcado)
-        calca = st.text_input("Calça Nº", value=st.session_state.calca)
-        tam_calca = st.text_input("Tam. Calça", value=st.session_state.tam_calca)
-        camisa = st.text_input("Camisa Nº", value=st.session_state.camisa)
-        tam_camisa = st.text_input("Tam. Camisa", value=st.session_state.tam_camisa)
-
-st.markdown("### 🛠️ Entrega Atual")
-col_e1, col_e2 = st.columns(2)
-with col_e1:
-    epi_nome = st.text_input("Material Entregue (Ex: Bota de Segurança)")
-    # Data em que a entrega está sendo feita / ficha está sendo assinada no momento
-    data_entrega = st.date_input("Data da Entrega / Assinatura", value=datetime.now()).strftime("%d/%m/%Y")
-with col_e2:
-    ca_epi = st.text_input("Número do C.A.")
-
-st.info("Assinatura do Funcionário (Desenhe abaixo com o dedo):")
-canvas_result = st_canvas(
-    stroke_width=2,
-    stroke_color="#000000",
-    background_color="#FFFFFF",
-    height=120,
-    width=350,
-    drawing_mode="freedraw",
-    key="canvas_assinatura_principal"
-)
-
-if st.button("💾 Salvar e Gerar Ficha Oficial", type="primary", use_container_width=True):
-    if not input_nome or not epi_nome:
-        st.error("Preencha o Nome do funcionário e o Material Entregue.")
-    else:
-        img_assinatura = None
-        if canvas_result.image_data is not None:
-            input_array = canvas_result.image_data
-            img_assinatura = Image.fromarray(input_array.astype('uint8'), mode="RGBA")
-
-        novo_registro = pd.DataFrame([{
-            "Nome": input_nome, "Empresa": empresa, "Setor": setor, "Funcao": funcao,
-            "CTPS": ctps, "DataAdm": data_adm, "Calcado": calcado, "Calca": calca,
-            "TamCalca": tam_calca, "Camisa": camisa, "TamCamisa": tam_camisa,
-            "Data": data_entrega, "EPI": epi_nome, "CA": ca_epi
-        }])
-        
-        if os.path.exists(ARQUIVO_MEMORIA):
-            df_completo = pd.read_csv(ARQUIVO_MEMORIA)
-            df_completo = pd.concat([df_completo, novo_registro], ignore_index=True)
+    # Auto-preenchimento inteligente se já existir histórico
+    empresa_val, setor_val, funcao_val, ctps_val, dataadm_val = "", "", "", "", ""
+    calcado_val, calca_val, tamcalca_val, camisa_val, tamcamisa_val = "", "", "", "", ""
+    
+    if btn_autofill and input_nome:
+        match = df_geral[df_geral["Nome"].str.lower() == input_nome.strip().lower()]
+        if not match.empty:
+            ultima = match.iloc[-1]
+            empresa_val = str(ultima.get('Empresa', ''))
+            setor_val = str(ultima.get('Setor', ''))
+            funcao_val = str(ultima.get('Funcao', ''))
+            ctps_val = str(ultima.get('CTPS', ''))
+            dataadm_val = str(ultima.get('DataAdm', ''))
+            calcado_val = str(ultima.get('Calcado', ''))
+            calca_val = str(ultima.get('Calca', ''))
+            tamcalca_val = str(ultima.get('TamCalca', ''))
+            camisa_val = str(ultima.get('Camisa', ''))
+            tamcamisa_val = str(ultima.get('TamCamisa', ''))
+            st.success("Dados do funcionário carregados com sucesso!")
         else:
-            df_completo = novo_registro
+            st.info("Novo colaborador detectado. Preencha os dados abaixo.")
+
+    with st.container():
+        c1, c2 = st.columns(2)
+        with c1:
+            empresa = st.text_input("Empresa", value=empresa_val)
+            setor = st.text_input("Setor", value=setor_val)
+            funcao = st.text_input("Função", value=funcao_val)
+            ctps = st.text_input("CTPS", value=ctps_val)
+            data_adm = st.text_input("Data de Admissão", value=dataadm_val)
+        with c2:
+            calcado = st.text_input("Calçado Nº", value=calcado_val)
+            calca = st.text_input("Calça Nº", value=calca_val)
+            tam_calca = st.text_input("Tam. Calça", value=tamcalca_val)
+            camisa = st.text_input("Camisa Nº", value=camisa_val)
+            tam_camisa = st.text_input("Tam. Camisa", value=tamcamisa_val)
+
+    st.markdown("---")
+    st.markdown("### 📦 Detalhes do Material Entregue")
+    
+    e1, e2, e3 = st.columns(3)
+    with e1:
+        epi_nome = st.text_input("Nome do EPI (Ex: Botina de Couro)")
+    with e2:
+        ca_epi = st.text_input("Número do C.A.")
+    with e3:
+        data_entrega = st.date_input("Data da Assinatura / Entrega", value=datetime.now()).strftime("%d/%m/%Y")
+        
+    st.info("✍️ Assinatura Digital do Funcionário:")
+    canvas_result = st_canvas(
+        stroke_width=2,
+        stroke_color="#000000",
+        background_color="#FFFFFF",
+        height=130,
+        width=400,
+        drawing_mode="freedraw",
+        key="canvas_assinatura_principal"
+    )
+    
+    if st.button("💾 Salvar Registro e Gerar Comprovante", type="primary", use_container_width=True):
+        if not input_nome or not epi_nome:
+            st.error("Por favor, preencha o Nome do Funcionário e o Material Entregue.")
+        else:
+            img_assinatura = None
+            if canvas_result.image_data is not None:
+                img_assinatura = Image.fromarray(canvas_result.image_data.astype('uint8'), mode="RGBA")
+                
+            novo_reg = pd.DataFrame([{
+                "Nome": input_nome, "Empresa": empresa, "Setor": setor, "Funcao": funcao,
+                "CTPS": ctps, "DataAdm": data_adm, "Calcado": calcado, "Calca": calca,
+                "TamCalca": tam_calca, "Camisa": camisa, "TamCamisa": tam_camisa,
+                "DataEntrega": data_entrega, "EPI": epi_nome, "CA": ca_epi
+            }])
             
-        df_completo.to_csv(ARQUIVO_MEMORIA, index=False)
+            df_atualizado = pd.concat([df_geral, novo_reg], ignore_index=True)
+            df_atualizado.to_csv(ARQUIVO_MEMORIA, index=False)
+            
+            hist_func = df_atualizado[df_atualizado["Nome"].str.lower() == input_nome.strip().lower()]
+            dados_colab = {
+                "Nome": input_nome, "Empresa": empresa, "Setor": setor, "Funcao": funcao,
+                "CTPS": ctps, "DataAdm": data_adm, "Calcado": calcado, "Calca": calca,
+                "TamCalca": tam_calca, "Camisa": camisa, "TamCamisa": tam_camisa
+            }
+            
+            pdf_path = gerar_pdf_comprovante(dados_colab, hist_func, img_assinatura)
+            st.success("Entrega registrada e salva na base com sucesso!")
+            
+            with open(pdf_path, "rb") as f:
+                st.download_button("📥 Baixar Comprovante Oficial em PDF", f, file_name=pdf_path, mime="application/pdf", type="primary")
+
+with aba2:
+    st.subheader("Consultar Histórico por Funcionário")
+    busca_nome = st.text_input("Digite o nome para consultar:")
+    if busca_nome:
+        resultado = df_geral[df_geral["Nome"].str.contains(busca_nome, case=False, na=False)]
+        if not resultado.empty:
+            st.write(f"Encontrados {len(resultado)} registros para '{busca_nome}':")
+            st.dataframe(resultado, use_container_width=True)
+        else:
+            st.warning("Nenhum funcionário encontrado com esse nome.")
+
+with aba3:
+    st.subheader("Base Completa de Dados")
+    if not df_geral.empty:
+        st.dataframe(df_geral, use_container_width=True)
         
-        hist_atualizado = carregar_historico(input_nome)
-        dados_colab = {
-            "Nome": input_nome, "Empresa": empresa, "Setor": setor, "Funcao": funcao,
-            "CTPS": ctps, "DataAdm": data_adm, "Calcado": calcado, "Calca": calca,
-            "TamCalca": tam_calca, "Camisa": camisa, "TamCamisa": tam_camisa
-        }
-        
-        arquivo_pdf = gerar_pdf(dados_colab, hist_atualizado, img_assinatura)
-        st.success("Ficha oficial gerada e salva com sucesso!")
-        
-        with open(arquivo_pdf, "rb") as f:
-            st.download_button("📥 Baixar Ficha PDF Oficial", f, file_name=arquivo_pdf, mime="application/pdf", type="primary")
+        csv_export = df_geral.to_csv(index=False).encode('utf-8')
+        st.download_button("📥 Baixar Base Completa em CSV (Backup)", csv_export, "base_epis_completa.csv", "text/csv")
+    else:
+        st.info("Nenhum registro cadastrado na base ainda.")
