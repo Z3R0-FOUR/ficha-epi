@@ -9,7 +9,6 @@ st.set_page_config(page_title="Ficha de EPI Digital", layout="wide")
 
 ARQUIVO_MEMORIA = "historico_epis.csv"
 
-# Cria o arquivo de memória se não existir
 if not os.path.exists(ARQUIVO_MEMORIA):
     df_vazio = pd.DataFrame(columns=[
         "Nome", "Empresa", "Setor", "Funcao", "CTPS", "DataAdm",
@@ -30,9 +29,10 @@ def gerar_pdf(dados, historico_df):
     if os.path.exists("31442.png"):
         pdf.image("31442.png", x=0, y=0, w=210, h=297)
     
-    pdf.set_font("Arial", "", 10)
+    # Letras maiores (tamanho 11) para facilitar a leitura no papel
+    pdf.set_font("Arial", "", 11)
     
-    # Cabeçalho - Ajustado para alinhar perfeitamente nas linhas da imagem 31442.png
+    # Cabeçalho - Ajustado para as linhas da frente
     pdf.text(22, 23, str(dados.get('Empresa', '')))
     pdf.text(155, 23, str(dados.get('Calcado', '')))
     
@@ -61,7 +61,7 @@ def gerar_pdf(dados, historico_df):
             pdf.text(105, y_atual, str(row['CA']))
             pdf.text(138, y_atual, "Assinado Digitalmente")
             
-    # --- PÁGINA 2 (VERSO DA FICHA) - Caso ultrapasse 14 EPIs ---
+    # --- PÁGINA 2 (VERSO DA FICHA) ---
     if len(historico_df) > 14:
         pdf.add_page()
         if os.path.exists("31443.png"):
@@ -167,4 +167,4 @@ if st.button("💾 Salvar e Gerar Ficha Oficial", type="primary", use_container_
         
         with open(arquivo_pdf, "rb") as f:
             st.download_button("📥 Baixar Ficha PDF Oficial", f, file_name=arquivo_pdf, mime="application/pdf", type="primary")
-    
+        
