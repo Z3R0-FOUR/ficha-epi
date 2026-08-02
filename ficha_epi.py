@@ -24,7 +24,6 @@ def carregar_dados():
     return pd.DataFrame()
 
 def safe_str(val):
-    """Garante que acentos e caracteres especiais apareçam perfeitamente no PDF"""
     if pd.isna(val) or val is None:
         return ""
     return str(val).encode('latin-1', 'replace').decode('latin-1')
@@ -34,14 +33,12 @@ def gerar_pdf_comprovante(dados_colab, historico_funcionario, imagem_assinatura=
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.add_page()
     
-    # Cabeçalho do Comprovante Profissional
     pdf.set_font("Arial", "B", 16)
     pdf.cell(190, 10, safe_str("FICHA DE CONTROLE E ENTREGA DE EPI"), ln=True, align="C")
     pdf.set_font("Arial", "", 10)
     pdf.cell(190, 6, safe_str("Em conformidade com a Norma Regulamentadora NR-06"), ln=True, align="C")
     pdf.ln(5)
     
-    # Dados do Funcionário
     pdf.set_font("Arial", "B", 11)
     pdf.cell(190, 8, safe_str("1. Dados do Colaborador"), ln=True)
     pdf.set_font("Arial", "", 10)
@@ -60,11 +57,9 @@ def gerar_pdf_comprovante(dados_colab, historico_funcionario, imagem_assinatura=
     pdf.cell(64, 6, safe_str(f"Camisa: {dados_colab.get('Camisa', '')} ({dados_colab.get('TamCamisa', '')})"), border=1, ln=True)
     pdf.ln(8)
     
-    # Histórico de EPIs Entregues
     pdf.set_font("Arial", "B", 11)
     pdf.cell(190, 8, safe_str("2. Histórico de Equipamentos Entregues"), ln=True)
     
-    # Cabeçalho da Tabela
     pdf.set_font("Arial", "B", 9)
     pdf.cell(25, 7, safe_str("Data"), border=1, align="C")
     pdf.cell(125, 7, safe_str("Equipamento de Proteção Individual (EPI)"), border=1, align="C")
@@ -78,14 +73,12 @@ def gerar_pdf_comprovante(dados_colab, historico_funcionario, imagem_assinatura=
         
     pdf.ln(10)
     
-    # Termo de Responsabilidade
     pdf.set_font("Arial", "B", 9)
     pdf.cell(190, 5, safe_str("TERMO DE RESPONSABILIDADE:"), ln=True)
     pdf.set_font("Arial", "", 8)
     pdf.multi_cell(190, 4, safe_str("Declaro que recebi os EPIs acima relacionados em perfeito estado de conservação, compromete-me a usá-los estritamente para os fins a que se destinam, responsabilizando-me pela sua guarda, higienização e conservação, bem como comunicar à empresa qualquer irregularidade ou dano."))
     pdf.ln(15)
     
-    # Assinatura
     if imagem_assinatura is not None:
         caminho_ass = "temp_assinatura.png"
         imagem_assinatura.save(caminho_ass)
@@ -101,83 +94,100 @@ def gerar_pdf_comprovante(dados_colab, historico_funcionario, imagem_assinatura=
     pdf.output(nome_arquivo)
     return nome_arquivo
 
-# ================= INTERFACE PRINCIPAL =================
-
 st.title("🛡️ Sistema Profissional de Controle de EPIs")
 
 aba1, aba2, aba3 = st.tabs(["➕ Registrar Entrega", "👥 Consultar Colaborador", "📊 Base Completa"])
 
 df_geral = carregar_dados()
 
+# Inicializa o estado de sessão para preenchimento automático
+if "form_nome" not in st.session_state: st.session_state.form_nome = ""
+if "form_empresa" not in st.session_state: st.session_state.form_empresa = ""
+if "form_setor" not in st.session_state: st.session_state.form_setor = ""
+if "form_funcao" not in st.session_state: st.session_state.form_funcao = ""
+if "form_ctps" not in st.session_state: st.session_state.form_ctps = ""
+if "form_dataadm" not in st.session_state: st.session_state.form_dataadm = ""
+if "form_calcado" not in st.session_state: st.session_state.form_calcado = ""
+if "form_calca" not in st.session_state: st.session_state.form_calca = ""
+if "form_tamcalca" not in st.session_state: st.session_state.form_tamcalca = ""
+if "form_camisa" not in st.session_state: st.session_state.form_camisa = ""
+if "form_tamcamisa" not in st.session_state: st.session_state.form_tamcamisa = ""
+
 with aba1:
     st.subheader("Nova Entrega de EPI")
     
-    col_n1, col_n2 = st.columns([3, 1])
-    with col_n1:
-        input_nome = st.text_input("Nome Completo do Funcionário:")
-    with col_n2:
+    st.markdown("### 🔍 1. Buscar Colaborador Existente")
+    col_b1, col_b2 = st.columns([3, 1])
+    with col_b1:
+        termo_busca = st.text_input("Digite o nome para puxar os dados salvos:", placeholder="Ex: Samuel")
+    with col_b2:
         st.write("")
-        btn_autofill = st.button("🔍 Carregar Dados", use_container_width=True)
-        
-    empresa_val, setor_val, funcao_val, ctps_val, dataadm_val = "", "", "", "", ""
-    calcado_val, calca_val, tamcalca_val, camisa_val, tamcamisa_val = "", "", "", "", ""
-    
-    if btn_autofill and input_nome:
-        match = df_geral[df_geral["Nome"].str.lower() == input_nome.strip().lower()]
-        if not match.empty:
-            ultima = match.iloc[-1]
-            empresa_val = str(ultima.get('Empresa', ''))
-            setor_val = str(ultima.get('Setor', ''))
-            funcao_val = str(ultima.get('Funcao', ''))
-            ctps_val = str(ultima.get('CTPS', ''))
-            dataadm_val = str(ultima.get('DataAdm', ''))
-            calcado_val = str(ultima.get('Calcado', ''))
-            calca_val = str(ultima.get('Calca', ''))
-            tamcalca_val = str(ultima.get('TamCalca', ''))
-            camisa_val = str(ultima.get('Camisa', ''))
-            tamcamisa_val = str(ultima.get('TamCamisa', ''))
-            st.success("Dados do funcionário carregados com sucesso!")
-        else:
-            st.info("Novo colaborador detectado. Preencha os dados abaixo.")
-
-    with st.container():
-        c1, c2 = st.columns(2)
-        with c1:
-            empresa = st.text_input("Empresa", value=empresa_val)
-            setor = st.text_input("Setor", value=setor_val)
-            funcao = st.text_input("Função", value=funcao_val)
-            ctps = st.text_input("CTPS", value=ctps_val)
-            data_adm = st.text_input("Data de Admissão", value=dataadm_val)
-        with c2:
-            calcado = st.text_input("Calçado Nº", value=calcado_val)
-            calca = st.text_input("Calça Nº", value=calca_val)
-            tam_calca = st.text_input("Tam. Calça", value=tamcalca_val)
-            camisa = st.text_input("Camisa Nº", value=camisa_val)
-            tam_camisa = st.text_input("Tam. Camisa", value=tamcamisa_val)
+        if st.button("🔍 Carregar Dados", use_container_width=True):
+            if termo_busca:
+                match = df_geral[df_geral["Nome"].str.lower().str.contains(termo_busca.strip().lower(), na=False)]
+                if not match.empty:
+                    ultima = match.iloc[-1]
+                    st.session_state.form_nome = str(ultima.get('Nome', ''))
+                    st.session_state.form_empresa = str(ultima.get('Empresa', ''))
+                    st.session_state.form_setor = str(ultima.get('Setor', ''))
+                    st.session_state.form_funcao = str(ultima.get('Funcao', ''))
+                    st.session_state.form_ctps = str(ultima.get('CTPS', ''))
+                    st.session_state.form_dataadm = str(ultima.get('DataAdm', ''))
+                    st.session_state.form_calcado = str(ultima.get('Calcado', ''))
+                    st.session_state.form_calca = str(ultima.get('Calca', ''))
+                    st.session_state.form_tamcalca = str(ultima.get('TamCalca', ''))
+                    st.session_state.form_camisa = str(ultima.get('Camisa', ''))
+                    st.session_state.form_tamcamisa = str(ultima.get('TamCamisa', ''))
+                    st.success(f"Dados carregados com sucesso para: {st.session_state.form_nome}")
+                else:
+                    st.session_state.form_nome = termo_busca
+                    st.info("Colaborador não encontrado na base. Preencha os dados abaixo.")
 
     st.markdown("---")
-    st.markdown("### 📦 Detalhes do Material Entregue")
+    st.markdown("### 📝 2. Dados e Entrega")
     
-    e1, e2, e3 = st.columns(3)
-    with e1:
-        epi_nome = st.text_input("Nome do EPI (Ex: Botina de Couro)")
-    with e2:
-        ca_epi = st.text_input("Número do C.A.")
-    with e3:
-        data_entrega = st.date_input("Data da Assinatura / Entrega", value=datetime.now()).strftime("%d/%m/%Y")
+    with st.form("form_registro"):
+        input_nome = st.text_input("Nome Completo do Funcionário:", value=st.session_state.form_nome)
         
-    st.info("✍️ Assinatura Digital do Funcionário:")
-    canvas_result = st_canvas(
-        stroke_width=2,
-        stroke_color="#000000",
-        background_color="#FFFFFF",
-        height=130,
-        width=400,
-        drawing_mode="freedraw",
-        key="canvas_assinatura_principal"
-    )
-    
-    if st.button("💾 Salvar Registro e Gerar Comprovante", type="primary", use_container_width=True):
+        c1, c2 = st.columns(2)
+        with c1:
+            empresa = st.text_input("Empresa", value=st.session_state.form_empresa)
+            setor = st.text_input("Setor", value=st.session_state.form_setor)
+            funcao = st.text_input("Função", value=st.session_state.form_funcao)
+            ctps = st.text_input("CTPS", value=st.session_state.form_ctps)
+            data_adm = st.text_input("Data de Admissão", value=st.session_state.form_dataadm)
+        with c2:
+            calcado = st.text_input("Calçado Nº", value=st.session_state.form_calcado)
+            calca = st.text_input("Calça Nº", value=st.session_state.form_calca)
+            tam_calca = st.text_input("Tam. Calça", value=st.session_state.form_tamcalca)
+            camisa = st.text_input("Camisa Nº", value=st.session_state.form_camisa)
+            tam_camisa = st.text_input("Tam. Camisa", value=st.session_state.form_tamcamisa)
+
+        st.markdown("---")
+        st.markdown("### 📦 Detalhes do Material Entregue")
+        
+        e1, e2, e3 = st.columns(3)
+        with e1:
+            epi_nome = st.text_input("Nome do EPI (Ex: Botina de Couro)")
+        with e2:
+            ca_epi = st.text_input("Número do C.A.")
+        with e3:
+            data_entrega = st.date_input("Data da Assinatura / Entrega", value=datetime.now()).strftime("%d/%m/%Y")
+            
+        st.info("✍️ Assinatura Digital do Funcionário:")
+        canvas_result = st_canvas(
+            stroke_width=2,
+            stroke_color="#000000",
+            background_color="#FFFFFF",
+            height=130,
+            width=400,
+            drawing_mode="freedraw",
+            key="canvas_assinatura_principal"
+        )
+        
+        submitted = st.form_submit_button("💾 Salvar Registro e Gerar Comprovante", type="primary")
+
+    if submitted:
         if not input_nome or not epi_nome:
             st.error("Por favor, preencha o Nome do Funcionário e o Material Entregue.")
         else:
@@ -228,4 +238,4 @@ with aba3:
         st.download_button("📥 Baixar Base Completa em CSV (Backup)", csv_export, "base_epis_completa.csv", "text/csv")
     else:
         st.info("Nenhum registro cadastrado na base ainda.")
-        
+    
