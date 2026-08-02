@@ -11,17 +11,19 @@ st.set_page_config(page_title="Gestão Profissional de EPI", layout="wide", page
 DIRETORIO_ATUAL = os.path.dirname(os.path.abspath(__file__)) if "__file__" in locals() else "."
 ARQUIVO_MEMORIA = os.path.join(DIRETORIO_ATUAL, "historico_epis.csv")
 
-if not os.path.exists(ARQUIVO_MEMORIA):
-    df_vazio = pd.DataFrame(columns=[
-        "Nome", "Empresa", "Setor", "Funcao", "CTPS", "DataAdm",
-        "Calcado", "Calca", "TamCalca", "Camisa", "TamCamisa", "DataEntrega", "EPI", "CA"
-    ])
-    df_vazio.to_csv(ARQUIVO_MEMORIA, index=False)
+COLUNAS_PADRAO = [
+    "Nome", "Empresa", "Setor", "Funcao", "CTPS", "DataAdm",
+    "Calcado", "Calca", "TamCalca", "Camisa", "TamCamisa", "DataEntrega", "EPI", "CA"
+]
 
 def carregar_dados():
     if os.path.exists(ARQUIVO_MEMORIA):
-        return pd.read_csv(ARQUIVO_MEMORIA)
-    return pd.DataFrame()
+        df = pd.read_csv(ARQUIVO_MEMORIA)
+        for col in COLUNAS_PADRAO:
+            if col not in df.columns:
+                df[col] = ""
+        return df
+    return pd.DataFrame(columns=COLUNAS_PADRAO)
 
 def safe_str(val):
     if pd.isna(val) or val is None:
@@ -67,9 +69,12 @@ def gerar_pdf_comprovante(dados_colab, historico_funcionario, imagem_assinatura=
     
     pdf.set_font("Arial", "", 9)
     for _, row in historico_funcionario.iterrows():
-        pdf.cell(25, 6, safe_str(row['DataEntrega']), border=1, align="C")
-        pdf.cell(125, 6, safe_str(row['EPI']), border=1)
-        pdf.cell(40, 6, safe_str(row['CA']), border=1, align="C", ln=True)
+        data_ent = safe_str(row.get('DataEntrega', ''))
+        nome_epi = safe_str(row.get('EPI', ''))
+        num_ca = safe_str(row.get('CA', ''))
+        pdf.cell(25, 6, data_ent, border=1, align="C")
+        pdf.cell(125, 6, nome_epi, border=1)
+        pdf.cell(40, 6, num_ca, border=1, align="C", ln=True)
         
     pdf.ln(10)
     
@@ -90,7 +95,7 @@ def gerar_pdf_comprovante(dados_colab, historico_funcionario, imagem_assinatura=
     pdf.cell(190, 0, "", "T", ln=True)
     pdf.cell(190, 5, safe_str(f"Assinatura do Colaborador: {dados_colab.get('Nome', '')}"), ln=True, align="C")
     
-    nome_arquivo = f"Comprovante_{dados_colab['Nome'].replace(' ', '_')}.pdf"
+    nome_arquivo = f"Comprovante_{str(dados_colab.get('Nome', 'Colaborador')).replace(' ', '_')}.pdf"
     pdf.output(nome_arquivo)
     return nome_arquivo
 
@@ -100,18 +105,20 @@ aba1, aba2, aba3 = st.tabs(["➕ Registrar Entrega", "👥 Consultar Colaborador
 
 df_geral = carregar_dados()
 
-# Inicializa o estado de sessão para preenchimento automático
-if "form_nome" not in st.session_state: st.session_state.form_nome = ""
-if "form_empresa" not in st.session_state: st.session_state.form_empresa = ""
-if "form_setor" not in st.session_state: st.session_state.form_setor = ""
-if "form_funcao" not in st.session_state: st.session_state.form_funcao = ""
-if "form_ctps" not in st.session_state: st.session_state.form_ctps = ""
-if "form_dataadm" not in st.session_state: st.session_state.form_dataadm = ""
-if "form_calcado" not in st.session_state: st.session_state.form_calcado = ""
-if "form_calca" not in st.session_state: st.session_state.form_calca = ""
-if "form_tamcalca" not in st.session_state: st.session_state.form_tamcalca = ""
-if "form_camisa" not in st.session_state: st.session_state.form_camisa = ""
-if "form_tamcamisa" not in st.session_state: st.session_state.form_tamcamisa = ""
+# Inicialização limpa do session_state
+if "nome" not in st.session_state: st.session_state.nome = ""
+if "empresa" not in st.session_state: st.session_state.empresa = ""
+if "setor" not in st.session_state: st.session_state.setor = ""
+if "funcao" not in st.session_state: st.session_state.funcao = ""
+if "ctps" not in st.session_state: st.session_state.ctps = ""
+if "data_adm" not in st.session_state: st.session_state.data_adm = ""
+if "calcado" not in st.session_state: st.session_state.calcado = ""
+if "calca" not in st.session_state: st.session_state.calca = ""
+if "tam_calca" not in st.session_state: st.session_state.tam_calca = ""
+if "camisa" not in st.session_state: st.session_state.camisa = ""
+if "tam_camisa" not in st.session_state: st.session_state.tam_camisa = ""
+if "epi_nome" not in st.session_state: st.session_state.epi_nome = ""
+if "ca_epi" not in st.session_state: st.session_state.ca_epi = ""
 
 with aba1:
     st.subheader("Nova Entrega de EPI")
@@ -119,7 +126,7 @@ with aba1:
     st.markdown("### 🔍 1. Buscar Colaborador Existente")
     col_b1, col_b2 = st.columns([3, 1])
     with col_b1:
-        termo_busca = st.text_input("Digite o nome para puxar os dados salvos:", placeholder="Ex: Samuel")
+        termo_busca = st.text_input("Digite o nome para puxar os dados salvos:", placeholder="Ex: Samuel", key="termo_busca")
     with col_b2:
         st.write("")
         if st.button("🔍 Carregar Dados", use_container_width=True):
@@ -127,67 +134,65 @@ with aba1:
                 match = df_geral[df_geral["Nome"].str.lower().str.contains(termo_busca.strip().lower(), na=False)]
                 if not match.empty:
                     ultima = match.iloc[-1]
-                    st.session_state.form_nome = str(ultima.get('Nome', ''))
-                    st.session_state.form_empresa = str(ultima.get('Empresa', ''))
-                    st.session_state.form_setor = str(ultima.get('Setor', ''))
-                    st.session_state.form_funcao = str(ultima.get('Funcao', ''))
-                    st.session_state.form_ctps = str(ultima.get('CTPS', ''))
-                    st.session_state.form_dataadm = str(ultima.get('DataAdm', ''))
-                    st.session_state.form_calcado = str(ultima.get('Calcado', ''))
-                    st.session_state.form_calca = str(ultima.get('Calca', ''))
-                    st.session_state.form_tamcalca = str(ultima.get('TamCalca', ''))
-                    st.session_state.form_camisa = str(ultima.get('Camisa', ''))
-                    st.session_state.form_tamcamisa = str(ultima.get('TamCamisa', ''))
-                    st.success(f"Dados carregados com sucesso para: {st.session_state.form_nome}")
+                    st.session_state.nome = str(ultima.get('Nome', ''))
+                    st.session_state.empresa = str(ultima.get('Empresa', ''))
+                    st.session_state.setor = str(ultima.get('Setor', ''))
+                    st.session_state.funcao = str(ultima.get('Funcao', ''))
+                    st.session_state.ctps = str(ultima.get('CTPS', ''))
+                    st.session_state.data_adm = str(ultima.get('DataAdm', ''))
+                    st.session_state.calcado = str(ultima.get('Calcado', ''))
+                    st.session_state.calca = str(ultima.get('Calca', ''))
+                    st.session_state.tam_calca = str(ultima.get('TamCalca', ''))
+                    st.session_state.camisa = str(ultima.get('Camisa', ''))
+                    st.session_state.tam_camisa = str(ultima.get('TamCamisa', ''))
+                    st.success(f"Dados carregados com sucesso para: {st.session_state.nome}")
+                    st.rerun()
                 else:
-                    st.session_state.form_nome = termo_busca
+                    st.session_state.nome = termo_busca
                     st.info("Colaborador não encontrado na base. Preencha os dados abaixo.")
 
     st.markdown("---")
     st.markdown("### 📝 2. Dados e Entrega")
     
-    with st.form("form_registro"):
-        input_nome = st.text_input("Nome Completo do Funcionário:", value=st.session_state.form_nome)
-        
-        c1, c2 = st.columns(2)
-        with c1:
-            empresa = st.text_input("Empresa", value=st.session_state.form_empresa)
-            setor = st.text_input("Setor", value=st.session_state.form_setor)
-            funcao = st.text_input("Função", value=st.session_state.form_funcao)
-            ctps = st.text_input("CTPS", value=st.session_state.form_ctps)
-            data_adm = st.text_input("Data de Admissão", value=st.session_state.form_dataadm)
-        with c2:
-            calcado = st.text_input("Calçado Nº", value=st.session_state.form_calcado)
-            calca = st.text_input("Calça Nº", value=st.session_state.form_calca)
-            tam_calca = st.text_input("Tam. Calça", value=st.session_state.form_tamcalca)
-            camisa = st.text_input("Camisa Nº", value=st.session_state.form_camisa)
-            tam_camisa = st.text_input("Tam. Camisa", value=st.session_state.form_tamcamisa)
+    input_nome = st.text_input("Nome Completo do Funcionário:", key="nome")
+    
+    c1, c2 = st.columns(2)
+    with c1:
+        empresa = st.text_input("Empresa", key="empresa")
+        setor = st.text_input("Setor", key="setor")
+        funcao = st.text_input("Função", key="funcao")
+        ctps = st.text_input("CTPS", key="ctps")
+        data_adm = st.text_input("Data de Admissão", key="data_adm")
+    with c2:
+        calcado = st.text_input("Calçado Nº", key="calcado")
+        calca = st.text_input("Calça Nº", key="calca")
+        tam_calca = st.text_input("Tam. Calça", key="tam_calca")
+        camisa = st.text_input("Camisa Nº", key="camisa")
+        tam_camisa = st.text_input("Tam. Camisa", key="tam_camisa")
 
-        st.markdown("---")
-        st.markdown("### 📦 Detalhes do Material Entregue")
+    st.markdown("---")
+    st.markdown("### 📦 Detalhes do Material Entregue")
+    
+    e1, e2, e3 = st.columns(3)
+    with e1:
+        epi_nome = st.text_input("Nome do EPI (Ex: Botina de Couro)", key="epi_nome")
+    with e2:
+        ca_epi = st.text_input("Número do C.A.", key="ca_epi")
+    with e3:
+        data_entrega = st.date_input("Data da Assinatura / Entrega", value=datetime.now()).strftime("%d/%m/%Y")
         
-        e1, e2, e3 = st.columns(3)
-        with e1:
-            epi_nome = st.text_input("Nome do EPI (Ex: Botina de Couro)")
-        with e2:
-            ca_epi = st.text_input("Número do C.A.")
-        with e3:
-            data_entrega = st.date_input("Data da Assinatura / Entrega", value=datetime.now()).strftime("%d/%m/%Y")
-            
-        st.info("✍️ Assinatura Digital do Funcionário:")
-        canvas_result = st_canvas(
-            stroke_width=2,
-            stroke_color="#000000",
-            background_color="#FFFFFF",
-            height=130,
-            width=400,
-            drawing_mode="freedraw",
-            key="canvas_assinatura_principal"
-        )
-        
-        submitted = st.form_submit_button("💾 Salvar Registro e Gerar Comprovante", type="primary")
-
-    if submitted:
+    st.info("✍️ Assinatura Digital do Funcionário:")
+    canvas_result = st_canvas(
+        stroke_width=2,
+        stroke_color="#000000",
+        background_color="#FFFFFF",
+        height=130,
+        width=400,
+        drawing_mode="freedraw",
+        key="canvas_assinatura_principal"
+    )
+    
+    if st.button("💾 Salvar Registro e Gerar Comprovante", type="primary", use_container_width=True):
         if not input_nome or not epi_nome:
             st.error("Por favor, preencha o Nome do Funcionário e o Material Entregue.")
         else:
@@ -220,7 +225,7 @@ with aba1:
 
 with aba2:
     st.subheader("Consultar Histórico por Funcionário")
-    busca_nome = st.text_input("Digite o nome para consultar:")
+    busca_nome = st.text_input("Digite o nome para consultar:", key="busca_aba2")
     if busca_nome:
         resultado = df_geral[df_geral["Nome"].str.contains(busca_nome, case=False, na=False)]
         if not resultado.empty:
@@ -238,4 +243,3 @@ with aba3:
         st.download_button("📥 Baixar Base Completa em CSV (Backup)", csv_export, "base_epis_completa.csv", "text/csv")
     else:
         st.info("Nenhum registro cadastrado na base ainda.")
-    
