@@ -5,105 +5,130 @@ from fpdf import FPDF
 from streamlit_drawable_canvas import st_canvas
 import os
 
-# Configuração da página
-st.set_page_config(page_title="Ficha de EPI Digital", layout="wide")
+st.set_page_config(page_title="Ficha de EPI", layout="wide")
 
-# Arquivo de memória oculta
 ARQUIVO_MEMORIA = "historico_epis.csv"
 
-# Cria o arquivo de memória se ele não existir
+# Cria o arquivo de memória com as colunas novas
 if not os.path.exists(ARQUIVO_MEMORIA):
-    df_vazio = pd.DataFrame(columns=["Nome", "Funcao", "Setor", "Data", "EPI", "CA"])
+    df_vazio = pd.DataFrame(columns=[
+        "Nome", "Empresa", "Setor", "Funcao", "CTPS", "DataAdm",
+        "Calcado", "Calca", "Camisa", "Data", "EPI", "CA"
+    ])
     df_vazio.to_csv(ARQUIVO_MEMORIA, index=False)
 
-# Função para carregar histórico do funcionário
-def carregar_historico(nome_funcionario):
+def carregar_historico(nome):
     df = pd.read_csv(ARQUIVO_MEMORIA)
-    return df[df["Nome"].str.lower() == nome_funcionario.lower()]
+    return df[df["Nome"].str.lower() == nome.lower()]
 
-# Função para gerar o PDF
-def gerar_pdf(nome, funcao, setor, historico_df):
-    pdf = FPDF()
+def gerar_pdf(dados, historico_df):
+    pdf = FPDF(format="A4")
+    pdf.set_auto_page_break(auto=False)
+    
+    # --- PÁGINA 1 (FRENTE) ---
     pdf.add_page()
-    pdf.set_font("Arial", "B", 14)
+    # Usa a imagem da frente como fundo (A4 = 210x297mm)
+    pdf.image("31442.png", x=0, y=0, w=210, h=297)
     
-    # Cabeçalho
-    pdf.cell(200, 10, txt="FICHA DE CONTROLE DE EPI", ln=True, align="C")
-    pdf.set_font("Arial", "", 12)
-    pdf.cell(200, 10, txt=f"Nome: {nome}", ln=True)
-    pdf.cell(200, 10, txt=f"Função: {funcao} | Setor: {setor}", ln=True)
-    pdf.line(10, 40, 200, 40)
-    
-    # Termo de compromisso
-    pdf.set_font("Arial", "I", 10)
-    termo = "Declaro ter recebido os equipamentos de protecao abaixo relacionados, assumindo o compromisso de usa-los e conserva-los."
-    pdf.multi_cell(0, 10, txt=termo)
-    pdf.line(10, 60, 200, 60)
-    
-    # Tabela de Histórico
     pdf.set_font("Arial", "B", 10)
-    pdf.cell(40, 10, "DATA", border=1)
-    pdf.cell(90, 10, "MATERIAL ENTREGUE", border=1)
-    pdf.cell(60, 10, "C.A.", border=1)
-    pdf.ln()
     
-    pdf.set_font("Arial", "", 10)
+    # Carimbando os dados do Cabeçalho (Coordenadas X, Y aproximadas)
+    pdf.text(35, 23, str(dados.get('Empresa', '')))
+    pdf.text(165, 23, str(dados.get('Calcado', '')))
+    
+    pdf.text(25, 36, str(dados.get('Setor', '')))
+    pdf.text(160, 36, str(dados.get('Calca', '')))
+    
+    pdf.text(28, 48, str(dados.get('Funcao', '')))
+    pdf.text(160, 48, str(dados.get('Camisa', '')))
+    
+    pdf.text(45, 60, str(dados.get('Nome', '')))
+    pdf.text(160, 60, str(dados.get('DataAdm', '')))
+    
+    pdf.text(50, 72, str(dados.get('CTPS', '')))
+    
+    # Carimbando o Histórico na Tabela
+    y_inicial = 188  # Altura da primeira linha da tabela
+    passo_y = 8      # Distância entre as linhas
+    
+    pdf.set_font("Arial", "", 9)
     for index, row in historico_df.iterrows():
-        pdf.cell(40, 10, str(row["Data"]), border=1)
-        pdf.cell(90, 10, str(row["EPI"]), border=1)
-        pdf.cell(60, 10, str(row["CA"]), border=1)
-        pdf.ln()
+        if index < 12: # Cabem cerca de 12 linhas na frente
+            y_atual = y_inicial + (index * passo_y)
+            pdf.text(12, y_atual, str(row['Data']))
+            pdf.text(40, y_atual, str(row['EPI']))
+            pdf.text(110, y_atual, str(row['CA']))
+            pdf.text(145, y_atual, "Assinado Digitalmente")
+    
+    # --- PÁGINA 2 (VERSO) - Se tiver muitos itens ---
+    if len(historico_df) > 12:
+        pdf.add_page()
+        pdf.image("31443.png", x=0, y=0, w=210, h=297)
+        y_inicial_verso = 25
         
-    nome_arquivo_pdf = f"Ficha_EPI_{nome.replace(' ', '_')}.pdf"
+        for index, row in historico_df.iterrows():
+            if index >= 12:
+                linha_verso = index - 12
+                y_atual = y_inicial_verso + (linha_verso * passo_y)
+                pdf.text(12, y_atual, str(row['Data']))
+                pdf.text(40, y_atual, str(row['EPI']))
+                pdf.text(110, y_atual, str(row['CA']))
+                pdf.text(145, y_atual, "Assinado Digitalmente")
+        
+    nome_arquivo_pdf = f"Ficha_{dados['Nome'].replace(' ', '_')}.pdf"
     pdf.output(nome_arquivo_pdf)
     return nome_arquivo_pdf
 
-# ================= INTERFACE =================
+# ================= INTERFACE DO SITE =================
 
-st.title("🛡️ Sistema de Entrega de EPI")
-st.markdown("Busque o funcionário, registre a entrega e gere a ficha PDF atualizada.")
-st.markdown("---")
+st.title("🛡️ Emissão de Ficha de EPI")
 
-col1, col2 = st.columns([1, 1])
+busca_nome = st.text_input("Nome Completo do Colaborador:")
 
-with col1:
-    st.subheader("1. Dados do Funcionário e Entrega")
-    busca_nome = st.text_input("Nome do Colaborador (Digite para buscar ou criar novo):")
-    
-    funcao_padrao = ""
-    setor_padrao = ""
-    if busca_nome:
-        historico_existente = carregar_historico(busca_nome)
-        if not historico_existente.empty:
-            funcao_padrao = str(historico_existente.iloc[0]["Funcao"])
-            setor_padrao = str(historico_existente.iloc[0]["Setor"])
-            st.success(f"✅ Histórico encontrado! ({len(historico_existente)} itens já retirados).")
-    
-    funcao = st.text_input("Função", value=funcao_padrao)
-    setor = st.text_input("Setor", value=setor_padrao)
-    
-    st.markdown("#### O que está sendo entregue hoje?")
-    epi_nome = st.text_input("Material Entregue (Ex: Bota de Segurança)")
-    ca_epi = st.text_input("Número do C.A.")
-    data_entrega = st.date_input("Data da Entrega", value=datetime.now()).strftime("%d/%m/%Y")
+# Valores padrão
+empresa, setor, funcao, ctps, data_adm = "", "", "", "", ""
+calcado, calca, camisa = "", "", ""
 
-with col2:
-    st.subheader("2. Assinatura do Funcionário")
-    st.info("Assine abaixo com o dedo ou mouse:")
-    
-    canvas_result = st_canvas(
-        stroke_width=3, stroke_color="#000000", background_color="#FFFFFF",
-        height=150, width=400, drawing_mode="freedraw", key="assinatura"
-    )
+if busca_nome:
+    hist = carregar_historico(busca_nome)
+    if not hist.empty:
+        st.success(f"✅ Colaborador encontrado! ({len(hist)} EPIs já retirados).")
+        ultima = hist.iloc[-1]
+        empresa, setor, funcao = ultima['Empresa'], ultima['Setor'], ultima['Funcao']
+        ctps, data_adm = ultima['CTPS'], ultima['DataAdm']
+        calcado, calca, camisa = ultima['Calcado'], ultima['Calca'], ultima['Camisa']
 
-st.markdown("---")
+with st.expander("📝 Dados do Cabeçalho (Preencha ou Atualize)"):
+    col1, col2 = st.columns(2)
+    with col1:
+        empresa = st.text_input("Empresa", value=empresa)
+        setor = st.text_input("Setor", value=setor)
+        funcao = st.text_input("Função", value=funcao)
+        ctps = st.text_input("Carteira de Trabalho", value=ctps)
+        data_adm = st.text_input("Data de Admissão", value=data_adm)
+    with col2:
+        calcado = st.text_input("Calçado Nº", value=calcado)
+        calca = st.text_input("Calça Nº/Tam", value=calca)
+        camisa = st.text_input("Camisa Nº/Tam", value=camisa)
 
-if st.button("💾 Salvar Entrega e Gerar PDF", type="primary", use_container_width=True):
+st.markdown("### Entrega de Hoje")
+col_epi1, col_epi2 = st.columns(2)
+with col_epi1:
+    epi_nome = st.text_input("Material Entregue")
+    data_entrega = st.date_input("Data").strftime("%d/%m/%Y")
+with col_epi2:
+    ca_epi = st.text_input("C.A.")
+
+st.info("Assinatura do Colaborador:")
+canvas_result = st_canvas(stroke_width=2, height=100, width=350, drawing_mode="freedraw")
+
+if st.button("💾 Salvar e Gerar Ficha PDF Oficial", type="primary"):
     if not busca_nome or not epi_nome:
-        st.error("Preencha o Nome do funcionário e o EPI entregue.")
+        st.error("Preencha o Nome e o Material Entregue.")
     else:
         novo_registro = pd.DataFrame([{
-            "Nome": busca_nome, "Funcao": funcao, "Setor": setor,
+            "Nome": busca_nome, "Empresa": empresa, "Setor": setor, "Funcao": funcao,
+            "CTPS": ctps, "DataAdm": data_adm, "Calcado": calcado, "Calca": calca, "Camisa": camisa,
             "Data": data_entrega, "EPI": epi_nome, "CA": ca_epi
         }])
         
@@ -111,17 +136,12 @@ if st.button("💾 Salvar Entrega e Gerar PDF", type="primary", use_container_wi
         df_completo = pd.concat([df_completo, novo_registro], ignore_index=True)
         df_completo.to_csv(ARQUIVO_MEMORIA, index=False)
         
-        historico_atualizado = carregar_historico(busca_nome)
-        arquivo_pdf = gerar_pdf(busca_nome, funcao, setor, historico_atualizado)
+        hist_atualizado = carregar_historico(busca_nome)
+        dados_colab = {"Nome": busca_nome, "Empresa": empresa, "Setor": setor, "Funcao": funcao, "CTPS": ctps, "DataAdm": data_adm, "Calcado": calcado, "Calca": calca, "Camisa": camisa}
         
-        st.success(f"Entrega registrada com sucesso! A ficha PDF de {busca_nome} foi atualizada.")
+        arquivo_pdf = gerar_pdf(dados_colab, hist_atualizado)
+        st.success("Ficha gerada com sucesso!")
         
-        with open(arquivo_pdf, "rb") as pdf_file:
-            st.download_button(
-                label="📥 Clique aqui para Baixar a Ficha em PDF",
-                data=pdf_file,
-                file_name=arquivo_pdf,
-                mime="application/pdf",
-                type="primary"
-  )
-          
+        with open(arquivo_pdf, "rb") as f:
+            st.download_button("📥 Baixar PDF Idêntico ao Original", f, file_name=arquivo_pdf, mime="application/pdf", type="primary")
+            
