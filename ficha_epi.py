@@ -4,14 +4,14 @@ from datetime import datetime
 from fpdf import FPDF
 from streamlit_drawable_canvas import st_canvas
 import os
+from PIL import Image
+import io
 
 st.set_page_config(page_title="Ficha de EPI Digital", layout="wide")
 
-# Caminho seguro para a memória na nuvem
 DIRETORIO_ATUAL = os.path.dirname(os.path.abspath(__file__)) if "__file__" in locals() else "."
 ARQUIVO_MEMORIA = os.path.join(DIRETORIO_ATUAL, "historico_epis.csv")
 
-# Garante a criação da tabela de dados caso não exista
 if not os.path.exists(ARQUIVO_MEMORIA):
     df_vazio = pd.DataFrame(columns=[
         "Nome", "Empresa", "Setor", "Funcao", "CTPS", "DataAdm",
@@ -26,7 +26,7 @@ def carregar_historico(nome):
             return df[df["Nome"].str.lower() == nome.lower()]
     return pd.DataFrame(columns=["Nome", "Empresa", "Setor", "Funcao", "CTPS", "DataAdm", "Calcado", "Calca", "TamCalca", "Camisa", "TamCamisa", "Data", "EPI", "CA"])
 
-def gerar_pdf(dados, historico_df):
+def gerar_pdf(dados, historico_df, imagem_assinatura=None):
     pdf = FPDF(format="A4")
     pdf.set_auto_page_break(auto=False)
     
@@ -36,37 +36,45 @@ def gerar_pdf(dados, historico_df):
     if os.path.exists(img_frente):
         pdf.image(img_frente, x=0, y=0, w=210, h=297)
     
-    # Fonte legível e maior para o preenchimento automático
-    pdf.set_font("Arial", "", 11)
+    pdf.set_font("Arial", "", 10)
     
-    # Cabeçalho - Ajustado milimetricamente para a frente da ficha
-    pdf.text(22, 23, str(dados.get('Empresa', '')))
-    pdf.text(155, 23, str(dados.get('Calcado', '')))
+    # Cabeçalho - Posições corrigidas e exatas para a sua ficha
+    pdf.text(20, 21.5, str(dados.get('Empresa', '')))
+    pdf.text(142, 21.5, str(dados.get('Calcado', '')))
     
-    pdf.text(20, 31, str(dados.get('Setor', '')))
-    pdf.text(145, 31, str(dados.get('Calca', '')))
-    pdf.text(180, 31, str(dados.get('TamCalca', '')))
+    pdf.text(16, 29.5, str(dados.get('Setor', '')))
+    pdf.text(142, 29.5, str(dados.get('Calca', '')))
+    pdf.text(182, 29.5, str(dados.get('TamCalca', '')))
     
-    pdf.text(20, 39, str(dados.get('Funcao', '')))
-    pdf.text(145, 39, str(dados.get('Camisa', '')))
-    pdf.text(180, 39, str(dados.get('TamCamisa', '')))
+    pdf.text(22, 37.5, str(dados.get('Funcao', '')))
+    pdf.text(142, 37.5, str(dados.get('Camisa', '')))
+    pdf.text(182, 37.5, str(dados.get('TamCamisa', '')))
     
-    pdf.text(35, 48, str(dados.get('Nome', '')))
-    pdf.text(155, 48, str(dados.get('DataAdm', '')))
+    pdf.text(35, 45.5, str(dados.get('Nome', '')))
+    pdf.text(160, 45.5, str(dados.get('DataAdm', '')))
     
-    pdf.text(35, 57, str(dados.get('CTPS', '')))
+    pdf.text(45, 53.5, str(dados.get('CTPS', '')))
     
-    # Tabela de Histórico da Frente
-    y_inicial = 137
-    passo_y = 7.5
+    # Insere a assinatura desenhada logo acima da linha "Assinatura do Funcionário"
+    if imagem_assinatura is not None:
+        caminho_ass = "temp_assinatura.png"
+        imagem_assinatura.save(caminho_ass)
+        # Posicionamento centralizado na área de assinatura da frente
+        pdf.image(caminho_ass, x=75, y=110, w=60, h=18)
+        if os.path.exists(caminho_ass):
+            os.remove(caminho_ass)
+
+    # Tabela de Histórico da Frente (Ajustada para a grade inferior)
+    y_inicial = 145
+    passo_y = 7.3
     
     for index, row in historico_df.iterrows():
         if index < 14:
             y_atual = y_inicial + (index * passo_y)
             pdf.text(12, y_atual, str(row['Data']))
-            pdf.text(35, y_atual, str(row['EPI']))
-            pdf.text(105, y_atual, str(row['CA']))
-            pdf.text(138, y_atual, "Assinado Digitalmente")
+            pdf.text(30, y_atual, str(row['EPI']))
+            pdf.text(98, y_atual, str(row['CA']))
+            pdf.text(138, y_atual, "Entregue")
             
     # --- PÁGINA 2 (VERSO DA FICHA) ---
     if len(historico_df) > 14:
@@ -81,9 +89,9 @@ def gerar_pdf(dados, historico_df):
                 linha_verso = index - 14
                 y_atual = y_inicial_verso + (linha_verso * passo_y)
                 pdf.text(12, y_atual, str(row['Data']))
-                pdf.text(35, y_atual, str(row['EPI']))
-                pdf.text(105, y_atual, str(row['CA']))
-                pdf.text(138, y_atual, "Assinado Digitalmente")
+                pdf.text(30, y_atual, str(row['EPI']))
+                pdf.text(98, y_atual, str(row['CA']))
+                pdf.text(138, y_atual, "Entregue")
         
     nome_arquivo_pdf = f"Ficha_{dados['Nome'].replace(' ', '_')}.pdf"
     pdf.output(nome_arquivo_pdf)
@@ -152,6 +160,12 @@ if st.button("💾 Salvar e Gerar Ficha Oficial", type="primary", use_container_
     if not busca_nome or not epi_nome:
         st.error("Preencha o Nome do funcionário e o Material Entregue.")
     else:
+        # Captura o desenho da assinatura se houver traço
+        img_assinatura = None
+        if canvas_result.image_data is not None:
+            input_array = canvas_result.image_data
+            img_assinatura = Image.fromarray(input_array.astype('uint8'), mode="RGBA")
+
         novo_registro = pd.DataFrame([{
             "Nome": busca_nome, "Empresa": empresa, "Setor": setor, "Funcao": funcao,
             "CTPS": ctps, "DataAdm": data_adm, "Calcado": calcado, "Calca": calca,
@@ -174,7 +188,7 @@ if st.button("💾 Salvar e Gerar Ficha Oficial", type="primary", use_container_
             "TamCalca": tam_calca, "Camisa": camisa, "TamCamisa": tam_camisa
         }
         
-        arquivo_pdf = gerar_pdf(dados_colab, hist_atualizado)
+        arquivo_pdf = gerar_pdf(dados_colab, hist_atualizado, img_assinatura)
         st.success("Ficha oficial gerada e salva com sucesso!")
         
         with open(arquivo_pdf, "rb") as f:
