@@ -37,7 +37,7 @@ def gerar_pdf(dados, historico_df, imagem_assinatura=None):
     
     pdf.set_font("Arial", "", 10)
     
-    # Cabeçalho - Posições exatas na ficha
+    # Cabeçalho - Dados fixos do colaborador
     pdf.text(20, 21.5, str(dados.get('Empresa', '')))
     pdf.text(142, 21.5, str(dados.get('Calcado', '')))
     
@@ -50,11 +50,11 @@ def gerar_pdf(dados, historico_df, imagem_assinatura=None):
     pdf.text(182, 37.5, str(dados.get('TamCamisa', '')))
     
     pdf.text(35, 45.5, str(dados.get('Nome', '')))
-    pdf.text(160, 45.5, str(dados.get('DataAdm', '')))
+    pdf.text(160, 45.5, str(dados.get('DataAdm', ''))) # Data de Admissão no cabeçalho
     
     pdf.text(45, 53.5, str(dados.get('CTPS', '')))
     
-    # Insere a assinatura desenhada na frente
+    # Assinatura digitalizada na frente
     if imagem_assinatura is not None:
         caminho_ass = "temp_assinatura.png"
         imagem_assinatura.save(caminho_ass)
@@ -62,14 +62,14 @@ def gerar_pdf(dados, historico_df, imagem_assinatura=None):
         if os.path.exists(caminho_ass):
             os.remove(caminho_ass)
 
-    # Tabela de Histórico da Frente
+    # Tabela da Frente (Até 14 registros - cada um com sua respectiva data de entrega real)
     y_inicial = 145
     passo_y = 7.3
     
     for index, row in historico_df.iterrows():
         if index < 14:
             y_atual = y_inicial + (index * passo_y)
-            pdf.text(12, y_atual, str(row['Data']))
+            pdf.text(12, y_atual, str(row['Data']))  # Data exata da entrega/assinatura daquele EPI
             pdf.text(30, y_atual, str(row['EPI']))
             pdf.text(98, y_atual, str(row['CA']))
             pdf.text(138, y_atual, "Entregue")
@@ -86,7 +86,7 @@ def gerar_pdf(dados, historico_df, imagem_assinatura=None):
             if index >= 14:
                 linha_verso = index - 14
                 y_atual = y_inicial_verso + (linha_verso * passo_y)
-                pdf.text(12, y_atual, str(row['Data']))
+                pdf.text(12, y_atual, str(row['Data']))  # Data exata da entrega no verso/nova folha
                 pdf.text(30, y_atual, str(row['EPI']))
                 pdf.text(98, y_atual, str(row['CA']))
                 pdf.text(138, y_atual, "Entregue")
@@ -99,7 +99,6 @@ def gerar_pdf(dados, historico_df, imagem_assinatura=None):
 
 st.title("🛡️ Sistema de Ficha de EPI")
 
-# Gerencia o estado dos campos para preenchimento automático
 if "empresa" not in st.session_state:
     st.session_state.empresa = ""
     st.session_state.setor = ""
@@ -116,7 +115,7 @@ col_b1, col_b2 = st.columns([3, 1])
 with col_b1:
     input_nome = st.text_input("Digite o Nome do Funcionário:")
 with col_b2:
-    st.write("") # Espaçamento para alinhar o botão
+    st.write("")
     btn_buscar = st.button("🔍 Buscar", use_container_width=True)
 
 if btn_buscar and input_nome:
@@ -156,7 +155,8 @@ st.markdown("### 🛠️ Entrega Atual")
 col_e1, col_e2 = st.columns(2)
 with col_e1:
     epi_nome = st.text_input("Material Entregue (Ex: Bota de Segurança)")
-    data_entrega = st.date_input("Data da Entrega", value=datetime.now()).strftime("%d/%m/%Y")
+    # Data em que a entrega está sendo feita / ficha está sendo assinada no momento
+    data_entrega = st.date_input("Data da Entrega / Assinatura", value=datetime.now()).strftime("%d/%m/%Y")
 with col_e2:
     ca_epi = st.text_input("Número do C.A.")
 
@@ -207,4 +207,3 @@ if st.button("💾 Salvar e Gerar Ficha Oficial", type="primary", use_container_
         
         with open(arquivo_pdf, "rb") as f:
             st.download_button("📥 Baixar Ficha PDF Oficial", f, file_name=arquivo_pdf, mime="application/pdf", type="primary")
-            
