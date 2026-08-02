@@ -7,8 +7,11 @@ import os
 
 st.set_page_config(page_title="Ficha de EPI Digital", layout="wide")
 
-ARQUIVO_MEMORIA = "historico_epis.csv"
+# Caminho seguro para a memória na nuvem
+DIRETORIO_ATUAL = os.path.dirname(os.path.abspath(__file__)) if "__file__" in locals() else "."
+ARQUIVO_MEMORIA = os.path.join(DIRETORIO_ATUAL, "historico_epis.csv")
 
+# Garante a criação da tabela de dados caso não exista
 if not os.path.exists(ARQUIVO_MEMORIA):
     df_vazio = pd.DataFrame(columns=[
         "Nome", "Empresa", "Setor", "Funcao", "CTPS", "DataAdm",
@@ -17,8 +20,11 @@ if not os.path.exists(ARQUIVO_MEMORIA):
     df_vazio.to_csv(ARQUIVO_MEMORIA, index=False)
 
 def carregar_historico(nome):
-    df = pd.read_csv(ARQUIVO_MEMORIA)
-    return df[df["Nome"].str.lower() == nome.lower()]
+    if os.path.exists(ARQUIVO_MEMORIA):
+        df = pd.read_csv(ARQUIVO_MEMORIA)
+        if not df.empty and "Nome" in df.columns:
+            return df[df["Nome"].str.lower() == nome.lower()]
+    return pd.DataFrame(columns=["Nome", "Empresa", "Setor", "Funcao", "CTPS", "DataAdm", "Calcado", "Calca", "TamCalca", "Camisa", "TamCamisa", "Data", "EPI", "CA"])
 
 def gerar_pdf(dados, historico_df):
     pdf = FPDF(format="A4")
@@ -26,13 +32,14 @@ def gerar_pdf(dados, historico_df):
     
     # --- PÁGINA 1 (FRENTE DA FICHA) ---
     pdf.add_page()
-    if os.path.exists("31442.png"):
-        pdf.image("31442.png", x=0, y=0, w=210, h=297)
+    img_frente = os.path.join(DIRETORIO_ATUAL, "31442.png")
+    if os.path.exists(img_frente):
+        pdf.image(img_frente, x=0, y=0, w=210, h=297)
     
-    # Letras maiores (tamanho 11) para facilitar a leitura no papel
+    # Fonte legível e maior para o preenchimento automático
     pdf.set_font("Arial", "", 11)
     
-    # Cabeçalho - Ajustado para as linhas da frente
+    # Cabeçalho - Ajustado milimetricamente para a frente da ficha
     pdf.text(22, 23, str(dados.get('Empresa', '')))
     pdf.text(155, 23, str(dados.get('Calcado', '')))
     
@@ -64,8 +71,9 @@ def gerar_pdf(dados, historico_df):
     # --- PÁGINA 2 (VERSO DA FICHA) ---
     if len(historico_df) > 14:
         pdf.add_page()
-        if os.path.exists("31443.png"):
-            pdf.image("31443.png", x=0, y=0, w=210, h=297)
+        img_verso = os.path.join(DIRETORIO_ATUAL, "31443.png")
+        if os.path.exists(img_verso):
+            pdf.image(img_verso, x=0, y=0, w=210, h=297)
             
         y_inicial_verso = 25
         for index, row in historico_df.iterrows():
@@ -151,8 +159,12 @@ if st.button("💾 Salvar e Gerar Ficha Oficial", type="primary", use_container_
             "Data": data_entrega, "EPI": epi_nome, "CA": ca_epi
         }])
         
-        df_completo = pd.read_csv(ARQUIVO_MEMORIA)
-        df_completo = pd.concat([df_completo, novo_registro], ignore_index=True)
+        if os.path.exists(ARQUIVO_MEMORIA):
+            df_completo = pd.read_csv(ARQUIVO_MEMORIA)
+            df_completo = pd.concat([df_completo, novo_registro], ignore_index=True)
+        else:
+            df_completo = novo_registro
+            
         df_completo.to_csv(ARQUIVO_MEMORIA, index=False)
         
         hist_atualizado = carregar_historico(busca_nome)
@@ -163,8 +175,8 @@ if st.button("💾 Salvar e Gerar Ficha Oficial", type="primary", use_container_
         }
         
         arquivo_pdf = gerar_pdf(dados_colab, hist_atualizado)
-        st.success("Ficha oficial gerada com sucesso!")
+        st.success("Ficha oficial gerada e salva com sucesso!")
         
         with open(arquivo_pdf, "rb") as f:
             st.download_button("📥 Baixar Ficha PDF Oficial", f, file_name=arquivo_pdf, mime="application/pdf", type="primary")
-        
+            
