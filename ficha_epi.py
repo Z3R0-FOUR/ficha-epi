@@ -5,7 +5,6 @@ from fpdf import FPDF
 from streamlit_drawable_canvas import st_canvas
 import os
 from PIL import Image
-import io
 
 st.set_page_config(page_title="Ficha de EPI Digital", layout="wide")
 
@@ -23,7 +22,7 @@ def carregar_historico(nome):
     if os.path.exists(ARQUIVO_MEMORIA):
         df = pd.read_csv(ARQUIVO_MEMORIA)
         if not df.empty and "Nome" in df.columns:
-            return df[df["Nome"].str.lower() == nome.lower()]
+            return df[df["Nome"].str.lower() == nome.strip().lower()]
     return pd.DataFrame(columns=["Nome", "Empresa", "Setor", "Funcao", "CTPS", "DataAdm", "Calcado", "Calca", "TamCalca", "Camisa", "TamCamisa", "Data", "EPI", "CA"])
 
 def gerar_pdf(dados, historico_df, imagem_assinatura=None):
@@ -38,7 +37,7 @@ def gerar_pdf(dados, historico_df, imagem_assinatura=None):
     
     pdf.set_font("Arial", "", 10)
     
-    # Cabeçalho - Posições corrigidas e exatas para a sua ficha
+    # Cabeçalho - Posições exatas na ficha
     pdf.text(20, 21.5, str(dados.get('Empresa', '')))
     pdf.text(142, 21.5, str(dados.get('Calcado', '')))
     
@@ -55,16 +54,15 @@ def gerar_pdf(dados, historico_df, imagem_assinatura=None):
     
     pdf.text(45, 53.5, str(dados.get('CTPS', '')))
     
-    # Insere a assinatura desenhada logo acima da linha "Assinatura do Funcionário"
+    # Insere a assinatura desenhada na frente
     if imagem_assinatura is not None:
         caminho_ass = "temp_assinatura.png"
         imagem_assinatura.save(caminho_ass)
-        # Posicionamento centralizado na área de assinatura da frente
         pdf.image(caminho_ass, x=75, y=110, w=60, h=18)
         if os.path.exists(caminho_ass):
             os.remove(caminho_ass)
 
-    # Tabela de Histórico da Frente (Ajustada para a grade inferior)
+    # Tabela de Histórico da Frente
     y_inicial = 145
     passo_y = 7.3
     
@@ -101,41 +99,58 @@ def gerar_pdf(dados, historico_df, imagem_assinatura=None):
 
 st.title("🛡️ Sistema de Ficha de EPI")
 
-busca_nome = st.text_input("Digite o Nome do Funcionário:")
+# Gerencia o estado dos campos para preenchimento automático
+if "empresa" not in st.session_state:
+    st.session_state.empresa = ""
+    st.session_state.setor = ""
+    st.session_state.funcao = ""
+    st.session_state.ctps = ""
+    st.session_state.data_adm = ""
+    st.session_state.calcado = ""
+    st.session_state.calca = ""
+    st.session_state.tam_calca = ""
+    st.session_state.camisa = ""
+    st.session_state.tam_camisa = ""
 
-empresa, setor, funcao, ctps, data_adm = "", "", "", "", ""
-calcado, calca, tam_calca, camisa, tam_camisa = "", "", "", "", ""
+col_b1, col_b2 = st.columns([3, 1])
+with col_b1:
+    input_nome = st.text_input("Digite o Nome do Funcionário:")
+with col_b2:
+    st.write("") # Espaçamento para alinhar o botão
+    btn_buscar = st.button("🔍 Buscar", use_container_width=True)
 
-if busca_nome:
-    hist = carregar_historico(busca_nome)
+if btn_buscar and input_nome:
+    hist = carregar_historico(input_nome)
     if not hist.empty:
         st.success(f"✅ Histórico encontrado! ({len(hist)} EPIs registrados).")
         ultima = hist.iloc[-1]
-        empresa = str(ultima.get('Empresa', ''))
-        setor = str(ultima.get('Setor', ''))
-        funcao = str(ultima.get('Funcao', ''))
-        ctps = str(ultima.get('CTPS', ''))
-        data_adm = str(ultima.get('DataAdm', ''))
-        calcado = str(ultima.get('Calcado', ''))
-        calca = str(ultima.get('Calca', ''))
-        tam_calca = str(ultima.get('TamCalca', ''))
-        camisa = str(ultima.get('Camisa', ''))
-        tam_camisa = str(ultima.get('TamCamisa', ''))
+        st.session_state.empresa = str(ultima.get('Empresa', ''))
+        st.session_state.setor = str(ultima.get('Setor', ''))
+        st.session_state.funcao = str(ultima.get('Funcao', ''))
+        st.session_state.ctps = str(ultima.get('CTPS', ''))
+        st.session_state.data_adm = str(ultima.get('DataAdm', ''))
+        st.session_state.calcado = str(ultima.get('Calcado', ''))
+        st.session_state.calca = str(ultima.get('Calca', ''))
+        st.session_state.tam_calca = str(ultima.get('TamCalca', ''))
+        st.session_state.camisa = str(ultima.get('Camisa', ''))
+        st.session_state.tam_camisa = str(ultima.get('TamCamisa', ''))
+    else:
+        st.warning("⚠️ Nenhum histórico anterior encontrado para este nome. Preencha os dados abaixo.")
 
-with st.expander("📝 Preencher / Atualizar Dados do Funcionário"):
+with st.expander("📝 Preencher / Atualizar Dados do Funcionário", expanded=True):
     col1, col2 = st.columns(2)
     with col1:
-        empresa = st.text_input("Empresa", value=empresa)
-        setor = st.text_input("Setor", value=setor)
-        funcao = st.text_input("Função", value=funcao)
-        ctps = st.text_input("Carteira de Trabalho", value=ctps)
-        data_adm = st.text_input("Data de Admissão", value=data_adm)
+        empresa = st.text_input("Empresa", value=st.session_state.empresa)
+        setor = st.text_input("Setor", value=st.session_state.setor)
+        funcao = st.text_input("Função", value=st.session_state.funcao)
+        ctps = st.text_input("Carteira de Trabalho", value=st.session_state.ctps)
+        data_adm = st.text_input("Data de Admissão", value=st.session_state.data_adm)
     with col2:
-        calcado = st.text_input("Calçado Nº", value=calcado)
-        calca = st.text_input("Calça Nº", value=calca)
-        tam_calca = st.text_input("Tam. Calça", value=tam_calca)
-        camisa = st.text_input("Camisa Nº", value=camisa)
-        tam_camisa = st.text_input("Tam. Camisa", value=tam_camisa)
+        calcado = st.text_input("Calçado Nº", value=st.session_state.calcado)
+        calca = st.text_input("Calça Nº", value=st.session_state.calca)
+        tam_calca = st.text_input("Tam. Calça", value=st.session_state.tam_calca)
+        camisa = st.text_input("Camisa Nº", value=st.session_state.camisa)
+        tam_camisa = st.text_input("Tam. Camisa", value=st.session_state.tam_camisa)
 
 st.markdown("### 🛠️ Entrega Atual")
 col_e1, col_e2 = st.columns(2)
@@ -157,17 +172,16 @@ canvas_result = st_canvas(
 )
 
 if st.button("💾 Salvar e Gerar Ficha Oficial", type="primary", use_container_width=True):
-    if not busca_nome or not epi_nome:
+    if not input_nome or not epi_nome:
         st.error("Preencha o Nome do funcionário e o Material Entregue.")
     else:
-        # Captura o desenho da assinatura se houver traço
         img_assinatura = None
         if canvas_result.image_data is not None:
             input_array = canvas_result.image_data
             img_assinatura = Image.fromarray(input_array.astype('uint8'), mode="RGBA")
 
         novo_registro = pd.DataFrame([{
-            "Nome": busca_nome, "Empresa": empresa, "Setor": setor, "Funcao": funcao,
+            "Nome": input_nome, "Empresa": empresa, "Setor": setor, "Funcao": funcao,
             "CTPS": ctps, "DataAdm": data_adm, "Calcado": calcado, "Calca": calca,
             "TamCalca": tam_calca, "Camisa": camisa, "TamCamisa": tam_camisa,
             "Data": data_entrega, "EPI": epi_nome, "CA": ca_epi
@@ -181,9 +195,9 @@ if st.button("💾 Salvar e Gerar Ficha Oficial", type="primary", use_container_
             
         df_completo.to_csv(ARQUIVO_MEMORIA, index=False)
         
-        hist_atualizado = carregar_historico(busca_nome)
+        hist_atualizado = carregar_historico(input_nome)
         dados_colab = {
-            "Nome": busca_nome, "Empresa": empresa, "Setor": setor, "Funcao": funcao,
+            "Nome": input_nome, "Empresa": empresa, "Setor": setor, "Funcao": funcao,
             "CTPS": ctps, "DataAdm": data_adm, "Calcado": calcado, "Calca": calca,
             "TamCalca": tam_calca, "Camisa": camisa, "TamCamisa": tam_camisa
         }
